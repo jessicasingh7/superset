@@ -31,6 +31,11 @@ export interface ToastMeta {
   /** Whether to skip displaying this message if there are another toast
    * with the same message. */
   noDuplicate?: boolean;
-  /** For security reasons, HTML rendering is disabled by default. Use this property to enable it. */
+  /**
+   * For security reasons, HTML rendering is disabled by default. Use this
+   * property to enable it. When enabled, content is sanitized with DOMPurify
+   * before rendering to prevent XSS; callers should still avoid passing
+   * untrusted HTML when possible.
+   */
   allowHtml?: boolean;
 }

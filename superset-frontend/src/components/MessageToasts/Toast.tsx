@@ -24,8 +24,9 @@ import {
 } from '@apache-superset/core/theme';
 import { t } from '@apache-superset/core/translation';
 import cx from 'classnames';
+import DOMPurify from 'dompurify';
 import { Interweave } from 'interweave';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icons } from '@superset-ui/core/components/Icons';
 import { ToastType, ToastMeta } from './types';
 
@@ -108,6 +109,16 @@ export default function Toast({ toast, onCloseToast }: ToastPresenterProps) {
   }, [handleClosePress, toast.duration]);
 
   const theme = useTheme();
+  // Sanitize message content before rendering to prevent XSS, even when
+  // `allowHtml` is true. Without this, malicious HTML (e.g. in API error
+  // messages) could be injected via Interweave.
+  const sanitizedText = useMemo(
+    () =>
+      toast.allowHtml
+        ? DOMPurify.sanitize(toast.text, { USE_PROFILES: { html: true } })
+        : toast.text,
+    [toast.allowHtml, toast.text],
+  );
   let className = 'toast--success';
   let icon = (
     <Icons.CheckCircleFilled
@@ -150,7 +161,7 @@ export default function Toast({ toast, onCloseToast }: ToastPresenterProps) {
     >
       <div className="toast__content">
         {icon}
-        <Interweave content={toast.text} noHtml={!toast.allowHtml} />
+        <Interweave content={sanitizedText} noHtml={!toast.allowHtml} />
       </div>
       <Icons.CloseOutlined
         iconSize="m"
