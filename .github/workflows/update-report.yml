@@ -1,16 +1,16 @@
 name: Update Remediation Report
 
-# Event-driven status refresh. Triggers:
-#   - pull_request opened/closed on a Devin branch   → a PR landed or was merged
-#   - issues closed (label-filtered)                 → a vulnerability was resolved
-#   - workflow_dispatch                              → manual refresh
-#   - cron every 6h                                  → safety net for quiet periods
+# Periodic report refresh. Triggers:
+#   - cron every 6h         → regular snapshot
+#   - workflow_dispatch     → manual refresh
+#
+# Event-driven refresh on PR/issue activity is intentionally NOT used here:
+# it produced one report run per PR (8+ per batch) all titled after the
+# triggering PR, which made the Actions list look like duplicated work.
+# Per-PR status is already visible on the issue itself via the trigger
+# workflow's bounded poll.
 
 on:
-  pull_request:
-    types: [opened, closed]
-  issues:
-    types: [closed]
   workflow_dispatch:
   schedule:
     - cron: "0 */6 * * *"
@@ -18,12 +18,6 @@ on:
 jobs:
   update:
     runs-on: ubuntu-latest
-    # Filter noisy events: only run for our own PRs / our labeled issues / manual / cron.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'schedule' ||
-      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'vulnerability-remediation')) ||
-      (github.event_name == 'pull_request' && startsWith(github.event.pull_request.head.ref, 'devin/'))
 
     steps:
       - name: Checkout solution repo
