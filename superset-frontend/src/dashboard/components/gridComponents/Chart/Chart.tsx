@@ -29,6 +29,7 @@ import {
 import type { ChartCustomization, JsonObject } from '@superset-ui/core';
 import { styled } from '@apache-superset/core/theme';
 import { t } from '@apache-superset/core/translation';
+import { SafeMarkdown } from '@superset-ui/core/components';
 import { debounce } from 'lodash';
 import { bindActionCreators } from 'redux';
 import { useDispatch, useSelector } from 'react-redux';
@@ -700,23 +701,14 @@ const Chart = (props: ChartProps) => {
         chartHolderRef={props.chartHolderRef}
       />
 
-      {/*
-          This usage of dangerouslySetInnerHTML is safe since it is being used to render
-          markdown that is sanitized with nh3. See:
-             https://github.com/apache/superset/pull/4390
-          and
-             https://github.com/apache/superset/pull/23862
-        */}
       {isExpanded && slice.description_markdown && (
         <div
           className="slice_description bs-callout bs-callout-default"
           ref={descriptionRef}
-          // eslint-disable-next-line react/no-danger
-          dangerouslySetInnerHTML={{
-            __html: slice.description_markdown,
-          }}
           role="complementary"
-        />
+        >
+          <SafeMarkdown source={slice.description_markdown} />
+        </div>
       )}
 
       <ChartWrapper
