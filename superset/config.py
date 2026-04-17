@@ -1107,6 +1107,12 @@ SCREENSHOT_TILED_VIEWPORT_HEIGHT = 2000  # Height of each tile in pixels
 UPLOAD_FOLDER = BASE_DIR + "/static/uploads/"
 UPLOAD_CHUNK_SIZE = 4096
 
+# Maximum allowed size for uploaded files (in bytes). Flask uses this to reject
+# oversized requests before they are buffered to disk or memory, mitigating
+# denial-of-service risks from extremely large uploads. Defaults to 250 MB;
+# override in your deployment config as needed.
+MAX_CONTENT_LENGTH = 250 * 1024 * 1024
+
 # ---------------------------------------------------
 # Cache configuration
 # ---------------------------------------------------
