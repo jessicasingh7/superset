@@ -28,6 +28,7 @@ from superset.async_events.cache_backend import (
     RedisCacheBackend,
     RedisSentinelCacheBackend,
 )
+from superset.constants import INSECURE_GLOBAL_ASYNC_QUERIES_JWT_SECRET
 from superset.utils import json
 from superset.utils.core import get_user_id
 
@@ -130,7 +131,15 @@ class AsyncQueryManager:
         self._cache = get_cache_backend(app.config)
         logger.debug("Using GAQ Cache backend as %s", type(self._cache).__name__)
 
-        if len(app.config["GLOBAL_ASYNC_QUERIES_JWT_SECRET"]) < 32:
+        jwt_secret = app.config["GLOBAL_ASYNC_QUERIES_JWT_SECRET"]
+        if jwt_secret == INSECURE_GLOBAL_ASYNC_QUERIES_JWT_SECRET:
+            logger.warning(
+                "GLOBAL_ASYNC_QUERIES_JWT_SECRET is set to the known insecure "
+                "default value. Set the GLOBAL_ASYNC_QUERIES_JWT_SECRET "
+                "environment variable (or override it in superset_config.py) "
+                "to a strong, random string of at least 32 bytes."
+            )
+        if len(jwt_secret) < 32:
             raise AsyncQueryTokenException(
                 "Please provide a JWT secret at least 32 bytes long"
             )
@@ -146,7 +155,7 @@ class AsyncQueryManager:
             "GLOBAL_ASYNC_QUERIES_JWT_COOKIE_SAMESITE"
         ]
         self._jwt_cookie_domain = app.config["GLOBAL_ASYNC_QUERIES_JWT_COOKIE_DOMAIN"]
-        self._jwt_secret = app.config["GLOBAL_ASYNC_QUERIES_JWT_SECRET"]
+        self._jwt_secret = jwt_secret
 
         if app.config["GLOBAL_ASYNC_QUERIES_REGISTER_REQUEST_HANDLERS"]:
             self.register_request_handlers(app)

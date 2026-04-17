@@ -24,6 +24,18 @@ assists people when migrating to a new version.
 
 ## Next
 
+### GLOBAL_ASYNC_QUERIES_JWT_SECRET must be explicitly configured
+
+The `GLOBAL_ASYNC_QUERIES_JWT_SECRET` config value no longer has an insecure
+hardcoded default (`test-secret-change-me`). It must be provided via the
+`GLOBAL_ASYNC_QUERIES_JWT_SECRET` environment variable or overridden in
+`superset_config.py`. The async query manager continues to require a secret of
+at least 32 bytes and will refuse to initialize otherwise. A startup warning is
+also logged if the known insecure default value is detected.
+
+Deployments that have the `GLOBAL_ASYNC_QUERIES` feature flag enabled must
+ensure a strong, random secret is configured before upgrading.
+
 ### Granular Export Controls
 
 A new feature flag `GRANULAR_EXPORT_CONTROLS` introduces three fine-grained permissions that replace the legacy `can_csv` permission:
