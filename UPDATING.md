@@ -24,6 +24,22 @@ assists people when migrating to a new version.
 
 ## Next
 
+### Secure session cookies by default
+
+The default value of `SESSION_COOKIE_SECURE` has been changed from `False` to `True`, and
+the default `TALISMAN_CONFIG` has been updated to set `force_https=True` and
+`session_cookie_secure=True`. This ensures that session cookies are only transmitted
+over HTTPS in production deployments, mitigating session hijacking via man-in-the-middle
+attacks.
+
+`TALISMAN_DEV_CONFIG` retains the previous insecure defaults (`force_https=False`,
+`session_cookie_secure=False`) so that local HTTP-only development workflows continue
+to work.
+
+If you are running Superset over plain HTTP (not recommended for production), override
+`SESSION_COOKIE_SECURE = False` and adjust `TALISMAN_CONFIG` accordingly in your
+`superset_config.py`.
+
 ### Granular Export Controls
 
 A new feature flag `GRANULAR_EXPORT_CONTROLS` introduces three fine-grained permissions that replace the legacy `can_csv` permission:
