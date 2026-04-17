@@ -577,8 +577,24 @@ class SingleStoreSpec(BasicParametersMixin, BaseEngineSpec):
         :param cancel_query_id: SingleStore connection ID and aggregator ID
         :return: True if query cancelled successfully, False otherwise
         """
+        # SingleStore's KILL CONNECTION statement does not accept bind
+        # parameters, so each component of the identifier is validated as an
+        # integer before being formatted into the statement to prevent SQL
+        # injection.
+        if not isinstance(cancel_query_id, str):
+            logger.warning("Invalid SingleStore cancel_query_id: %s", cancel_query_id)
+            return False
         try:
-            cursor.execute(f"KILL CONNECTION {cancel_query_id}")
+            validated_ids = [int(part) for part in cancel_query_id.split()]
+        except (TypeError, ValueError):
+            logger.warning("Invalid SingleStore cancel_query_id: %s", cancel_query_id)
+            return False
+        if not validated_ids:
+            logger.warning("Invalid SingleStore cancel_query_id: %s", cancel_query_id)
+            return False
+        safe_id = " ".join(str(part) for part in validated_ids)
+        try:
+            cursor.execute(f"KILL CONNECTION {safe_id}")
         except Exception:  # pylint: disable=broad-except
             return False
 

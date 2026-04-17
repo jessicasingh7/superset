@@ -453,7 +453,15 @@ class MySQLEngineSpec(BasicParametersMixin, BaseEngineSpec):
         :return: True if query cancelled successfully, False otherwise
         """
         try:
-            cursor.execute(f"KILL CONNECTION {cancel_query_id}")
+            # MySQL's KILL statement does not accept bind parameters, so the
+            # connection id is validated as an integer before being formatted
+            # into the statement to prevent SQL injection.
+            connection_id = int(cancel_query_id)
+        except (TypeError, ValueError):
+            logger.warning("Invalid MySQL cancel_query_id: %s", cancel_query_id)
+            return False
+        try:
+            cursor.execute(f"KILL CONNECTION {connection_id}")
         except Exception:  # pylint: disable=broad-except
             return False
 
