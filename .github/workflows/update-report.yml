@@ -1,7 +1,7 @@
 name: Update Remediation Report
 
 # Periodic report refresh. Triggers:
-#   - cron every 6h         → regular snapshot
+#   - cron every 15 minutes → regular snapshot
 #   - workflow_dispatch     → manual refresh
 #
 # Event-driven refresh on PR/issue activity is intentionally NOT used here:
@@ -13,7 +13,7 @@ name: Update Remediation Report
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: "*/15 * * * *"
 
 jobs:
   update:
