@@ -2304,7 +2304,12 @@ GLOBAL_ASYNC_QUERIES_JWT_COOKIE_SAMESITE: None | (Literal["None", "Lax", "Strict
     None
 )
 GLOBAL_ASYNC_QUERIES_JWT_COOKIE_DOMAIN = None
-GLOBAL_ASYNC_QUERIES_JWT_SECRET = "test-secret-change-me"  # noqa: S105
+# The JWT secret used to sign async query tokens. MUST be provided via the
+# GLOBAL_ASYNC_QUERIES_JWT_SECRET environment variable (or overridden in
+# superset_config.py) before enabling the GLOBAL_ASYNC_QUERIES feature flag.
+# There is intentionally no insecure fallback: an empty or default value will
+# cause the async query manager to fail to initialize and log a warning.
+GLOBAL_ASYNC_QUERIES_JWT_SECRET = os.environ.get("GLOBAL_ASYNC_QUERIES_JWT_SECRET", "")
 GLOBAL_ASYNC_QUERIES_TRANSPORT: Literal["polling", "ws"] = "polling"
 GLOBAL_ASYNC_QUERIES_POLLING_DELAY = int(
     timedelta(milliseconds=500).total_seconds() * 1000
