@@ -16,6 +16,7 @@
 # under the License.
 
 import contextlib
+import logging
 import re
 import threading
 from re import Pattern
@@ -41,6 +42,14 @@ from superset.models.core import Database
 from superset.models.sql_lab import Query
 
 # Regular expressions to catch custom errors
+
+logger = logging.getLogger(__name__)
+
+# Ocient query ids are safe identifiers composed of alphanumerics, dashes,
+# and underscores. Validating the format prevents injection of arbitrary
+# values into the ``CANCEL`` statement, which does not support parameter
+# placeholders.
+_OCIENT_QUERY_ID_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
 
 CONNECTION_INVALID_USERNAME_REGEX = re.compile(
     r"The referenced user does not exist \(User '(?P<username>.*?)' not found\)"
@@ -392,7 +401,18 @@ class OcientEngineSpec(BaseEngineSpec):
     def cancel_query(cls, cursor: Any, query: Query, cancel_query_id: str) -> bool:
         with OcientEngineSpec.query_id_mapping_lock:
             if query.id in OcientEngineSpec.query_id_mapping:
-                cursor.execute(f"CANCEL {OcientEngineSpec.query_id_mapping[query.id]}")
+                ocient_query_id = str(OcientEngineSpec.query_id_mapping[query.id])
+                if not _OCIENT_QUERY_ID_RE.match(ocient_query_id):
+                    logger.warning(
+                        "Invalid Ocient query id for cancellation: %r",
+                        ocient_query_id,
+                    )
+                    del OcientEngineSpec.query_id_mapping[query.id]
+                    return False
+                # ``CANCEL`` statements in Ocient do not support parameter
+                # placeholders, so the query id is strictly validated above
+                # before being interpolated into the statement.
+                cursor.execute(f"CANCEL {ocient_query_id}")
                 # Query has been cancelled, so we can safely remove the cursor from
                 # the cache
                 del OcientEngineSpec.query_id_mapping[query.id]

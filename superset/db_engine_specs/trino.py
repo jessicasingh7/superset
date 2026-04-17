@@ -19,6 +19,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import math
+import re
 import threading
 import time
 from typing import Any, TYPE_CHECKING
@@ -58,6 +59,13 @@ if TYPE_CHECKING:
         from trino.dbapi import Cursor
 
 logger = logging.getLogger(__name__)
+
+# Trino query ids are safe identifiers composed of alphanumerics and
+# underscores (e.g. ``20230101_123456_00001_abcde``). Validating the format
+# prevents SQL injection when the value is interpolated into the
+# ``CALL system.runtime.kill_query`` statement, which does not support
+# parameter placeholders.
+_TRINO_QUERY_ID_RE = re.compile(r"^[A-Za-z0-9_]+$")
 
 try:
     # since trino is an optional dependency, we need to handle the ImportError
@@ -426,7 +434,14 @@ class TrinoEngineSpec(PrestoBaseEngineSpec):
         :param cancel_query_id: Trino `queryId`
         :return: True if query cancelled successfully, False otherwise
         """
+        if not cancel_query_id or not _TRINO_QUERY_ID_RE.match(cancel_query_id):
+            logger.warning("Invalid Trino cancel_query_id: %r", cancel_query_id)
+            return False
+
         try:
+            # ``CALL`` statements in Trino do not support parameter
+            # placeholders, so the query id is strictly validated above
+            # before being interpolated into the statement.
             cursor.execute(
                 f"CALL system.runtime.kill_query(query_id => '{cancel_query_id}',"
                 "message => 'Query cancelled by Superset')"

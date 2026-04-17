@@ -39,6 +39,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 # Query 5543ffdf692b7d02:f78a944000000000: 3% Complete (17 out of 547)
 QUERY_PROGRESS_REGEX = re.compile(r"Query.*: (?P<query_progress>[0-9]+)%")
+# Impala query ids are two 16-character hex segments separated by a colon,
+# e.g. ``5543ffdf692b7d02:f78a944000000000``. Validating the format prevents
+# injection of arbitrary values into the outbound HTTP cancel request.
+_IMPALA_QUERY_ID_RE = re.compile(r"^[0-9a-fA-F]{16}:[0-9a-fA-F]{16}$")
 
 
 class ImpalaEngineSpec(BaseEngineSpec):
@@ -207,10 +211,16 @@ class ImpalaEngineSpec(BaseEngineSpec):
         :param cancel_query_id: impala db not need
         :return: True if query cancelled successfully, False otherwise
         """
+        if not cancel_query_id or not _IMPALA_QUERY_ID_RE.match(cancel_query_id):
+            logger.warning("Invalid Impala cancel_query_id: %r", cancel_query_id)
+            return False
+
         try:
             impala_host = query.database.url_object.host
-            url = f"http://{impala_host}:25000/cancel_query?query_id={cancel_query_id}"
-            response = requests.post(url, timeout=3)
+            url = f"http://{impala_host}:25000/cancel_query"
+            response = requests.post(
+                url, params={"query_id": cancel_query_id}, timeout=3
+            )
         except Exception:  # pylint: disable=broad-except
             return False
 
