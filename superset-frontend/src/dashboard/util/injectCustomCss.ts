@@ -42,7 +42,7 @@ export default function injectCustomCss(css: string) {
   if ('styleSheet' in style) {
     (style as HTMLStyleElement & MysteryStyleElement).styleSheet.cssText = css;
   } else {
-    style.innerHTML = css;
+    style.textContent = css;
   }
 
   /**
