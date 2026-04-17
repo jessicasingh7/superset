@@ -1,0 +1,63 @@
+name: Update Remediation Report
+
+# Event-driven status refresh. Triggers:
+#   - pull_request opened/closed on a Devin branch   → a PR landed or was merged
+#   - issues closed (label-filtered)                 → a vulnerability was resolved
+#   - workflow_dispatch                              → manual refresh
+#   - cron every 6h                                  → safety net for quiet periods
+
+on:
+  pull_request:
+    types: [opened, closed]
+  issues:
+    types: [closed]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */6 * * *"
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    # Filter noisy events: only run for our own PRs / our labeled issues / manual / cron.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'vulnerability-remediation')) ||
+      (github.event_name == 'pull_request' && startsWith(github.event.pull_request.head.ref, 'devin/'))
+
+    steps:
+      - name: Checkout solution repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.REMEDIATION_REPO || 'jessicasingh7/vulnerability-remediation' }}
+          ref: ${{ vars.REMEDIATION_REF || 'main' }}
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Sync state from GitHub + Devin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          GITHUB_REPO: ${{ github.repository }}
+          DEVIN_API_TOKEN: ${{ secrets.DEVIN_API_TOKEN }}
+          DEVIN_ORG_ID: ${{ secrets.DEVIN_ORG_ID }}
+          VULN_PACK: ${{ vars.VULN_PACK || 'superset' }}
+        run: python orchestrator.py --poll
+
+      - name: Generate report
+        env:
+          GITHUB_REPO: ${{ github.repository }}
+          VULN_PACK: ${{ vars.VULN_PACK || 'superset' }}
+        run: python observability.py --summary
+
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v7
+        with:
+          path: report.html
+          archive: false
