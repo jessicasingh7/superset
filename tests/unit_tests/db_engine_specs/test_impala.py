@@ -75,7 +75,8 @@ def test_cancel_query(post_mock: Mock) -> None:
     result = spec.cancel_query(None, query, "6940643a2731718b:9fbdba2000000000")
 
     post_mock.assert_called_once_with(
-        "http://localhost:25000/cancel_query?query_id=6940643a2731718b:9fbdba2000000000",
+        "http://localhost:25000/cancel_query",
+        params={"query_id": "6940643a2731718b:9fbdba2000000000"},
         timeout=3,
     )
     assert result is True
@@ -96,7 +97,8 @@ def test_cancel_query_failed(post_mock: Mock) -> None:
     result = spec.cancel_query(None, query, "6940643a2731718b:9fbdba2000000000")
 
     post_mock.assert_called_once_with(
-        "http://localhost:25000/cancel_query?query_id=6940643a2731718b:9fbdba2000000000",
+        "http://localhost:25000/cancel_query",
+        params={"query_id": "6940643a2731718b:9fbdba2000000000"},
         timeout=3,
     )
     assert result is False
