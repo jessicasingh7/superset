@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import builtins
 import logging
+import re
 from collections import defaultdict
 from collections.abc import Hashable
 from dataclasses import dataclass, field
@@ -32,6 +33,7 @@ from flask_appbuilder import Model
 from flask_appbuilder.security.sqla.models import User
 from flask_babel import gettext as __, lazy_gettext as _
 from jinja2.exceptions import TemplateError
+from jinja2.sandbox import ImmutableSandboxedEnvironment
 from markupsafe import escape, Markup
 from sqlalchemy import (
     and_,
@@ -78,6 +80,7 @@ from superset.connectors.sqla.utils import (
 )
 from superset.daos.exceptions import DatasourceNotFound
 from superset.db_engine_specs.base import BaseEngineSpec, TimestampExpression
+from superset.errors import ErrorLevel, SupersetError, SupersetErrorType
 from superset.exceptions import (
     ColumnNotFoundException,
     DatasetInvalidPermissionEvaluationException,
@@ -164,6 +167,101 @@ COLUMN_FORM_DATA_PARAMS = [
 class DatasourceKind(StrEnum):
     VIRTUAL = "virtual"
     PHYSICAL = "physical"
+
+
+# Row Level Security filter clauses are rendered through a dedicated sandboxed
+# Jinja environment with a minimal, well-known context. This narrows the blast
+# radius of a template-injection attempt if an RLS definition is ever
+# influenced by an untrusted source.
+_RLS_ALLOWED_CONTEXT_KEYS: frozenset[str] = frozenset(
+    {
+        "current_user_id",
+        "current_username",
+        "current_user_email",
+        "current_user_roles",
+        "current_user_rls_rules",
+    }
+)
+
+# Tokens / keywords that must not appear in a rendered RLS clause. RLS filters
+# are concatenated into the ``WHERE`` clause of generated queries and must
+# behave as boolean expressions — they must not introduce additional
+# statements, comments, or data-definition / data-modification operations.
+_RLS_FORBIDDEN_TOKENS: tuple[str, ...] = (";", "--", "/*", "*/")
+_RLS_FORBIDDEN_KEYWORDS: tuple[str, ...] = (
+    "alter",
+    "attach",
+    "call",
+    "copy",
+    "create",
+    "delete",
+    "drop",
+    "exec",
+    "execute",
+    "grant",
+    "insert",
+    "merge",
+    "revoke",
+    "truncate",
+    "update",
+)
+_RLS_KEYWORD_PATTERN = re.compile(
+    r"\b(?:" + "|".join(_RLS_FORBIDDEN_KEYWORDS) + r")\b",
+    flags=re.IGNORECASE,
+)
+
+
+def _raise_rls_security_error(message: str) -> None:
+    raise SupersetSecurityException(
+        SupersetError(
+            message=message,
+            error_type=SupersetErrorType.GENERIC_COMMAND_ERROR,
+            level=ErrorLevel.ERROR,
+        )
+    )
+
+
+def _validate_rls_clause(clause: str) -> None:
+    """Reject rendered RLS clauses that do not look like a boolean expression.
+
+    This is a defense-in-depth check applied after sandboxed Jinja rendering:
+    even a valid template must not produce SQL that can break out of the
+    ``WHERE`` context.
+    """
+    for token in _RLS_FORBIDDEN_TOKENS:
+        if token in clause:
+            _raise_rls_security_error(
+                f"RLS filter clause contains forbidden token: {token!r}"
+            )
+    if match := _RLS_KEYWORD_PATTERN.search(clause):
+        _raise_rls_security_error(
+            f"RLS filter clause contains forbidden SQL keyword: "
+            f"{match.group(0).lower()!r}"
+        )
+
+
+def _render_rls_clause(
+    clause: str,
+    template_processor: BaseTemplateProcessor,
+) -> str:
+    """Render an RLS filter clause in a restricted sandboxed environment.
+
+    The RLS clause is evaluated with :class:`ImmutableSandboxedEnvironment` and
+    only a whitelist of user-identity context variables drawn from the caller's
+    template processor. Dangerous macros exposed to normal SQL templating
+    (``url_param``, ``filter_values``, ``metric``, engine-specific helpers,
+    etc.) are intentionally excluded so that RLS definitions cannot invoke
+    them even if an attacker manages to influence a clause.
+    """
+    env = ImmutableSandboxedEnvironment()
+    context = {
+        key: value
+        for key, value in template_processor.get_context().items()
+        if key in _RLS_ALLOWED_CONTEXT_KEYS
+    }
+    rendered = env.from_string(clause).render(context)
+    _validate_rls_clause(rendered)
+    return rendered
 
 
 class BaseDatasource(
@@ -761,7 +859,7 @@ class BaseDatasource(
         try:
             for filter_ in security_manager.get_rls_filters(self):
                 clause = self.text(
-                    f"({template_processor.process_template(filter_.clause)})"
+                    f"({_render_rls_clause(filter_.clause, template_processor)})"
                 )
                 if filter_.group_key:
                     filter_groups[filter_.group_key].append(clause)
@@ -773,7 +871,7 @@ class BaseDatasource(
                     if not include_global_guest_rls and not rule.get("dataset"):
                         continue
                     clause = self.text(
-                        f"({template_processor.process_template(rule['clause'])})"
+                        f"({_render_rls_clause(rule['clause'], template_processor)})"
                     )
                     all_filters.append(clause)
 
