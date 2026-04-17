@@ -197,6 +197,12 @@ class ImpalaEngineSpec(BaseEngineSpec):
         guid = last_operation.handle.operationId.guid[::-1].hex()
         return f"{guid[-16:]}:{guid[:16]}"
 
+    # Impala query IDs are formatted as two 16-character hex strings joined by
+    # a colon (e.g. ``6940643a2731718b:9fbdba2000000000``). Validate the
+    # identifier strictly before embedding it in the request URL to prevent
+    # injection into either the URL or downstream SQL.
+    _CANCEL_QUERY_ID_PATTERN = re.compile(r"^[0-9a-fA-F]+:[0-9a-fA-F]+$")
+
     @classmethod
     def cancel_query(cls, cursor: Any, query: Query, cancel_query_id: str) -> bool:
         """
@@ -207,10 +213,18 @@ class ImpalaEngineSpec(BaseEngineSpec):
         :param cancel_query_id: impala db not need
         :return: True if query cancelled successfully, False otherwise
         """
+        if not isinstance(
+            cancel_query_id, str
+        ) or not cls._CANCEL_QUERY_ID_PATTERN.match(cancel_query_id):
+            logger.warning("Invalid Impala cancel_query_id: %s", cancel_query_id)
+            return False
         try:
             impala_host = query.database.url_object.host
-            url = f"http://{impala_host}:25000/cancel_query?query_id={cancel_query_id}"
-            response = requests.post(url, timeout=3)
+            response = requests.post(
+                f"http://{impala_host}:25000/cancel_query",
+                params={"query_id": cancel_query_id},
+                timeout=3,
+            )
         except Exception:  # pylint: disable=broad-except
             return False
 

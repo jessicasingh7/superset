@@ -19,6 +19,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import math
+import re
 import threading
 import time
 from typing import Any, TYPE_CHECKING
@@ -416,6 +417,13 @@ class TrinoEngineSpec(PrestoBaseEngineSpec):
             query.set_extra_json_key(QUERY_EARLY_CANCEL_KEY, True)
             db.session.commit()  # pylint: disable=consider-using-transaction
 
+    # Trino query IDs follow the pattern `YYYYMMDD_HHMMSS_NNNNN_xxxxx` where
+    # each segment is made up of lowercase alphanumeric characters. The regex
+    # accepts alphanumeric characters, underscores, and hyphens so that test
+    # fixtures and other well-formed query identifiers are supported while
+    # rejecting anything that could be used for SQL injection.
+    _CANCEL_QUERY_ID_PATTERN = re.compile(r"^[A-Za-z0-9_\-]+$")
+
     @classmethod
     def cancel_query(cls, cursor: Cursor, query: Query, cancel_query_id: str) -> bool:
         """
@@ -426,10 +434,16 @@ class TrinoEngineSpec(PrestoBaseEngineSpec):
         :param cancel_query_id: Trino `queryId`
         :return: True if query cancelled successfully, False otherwise
         """
+        if not isinstance(
+            cancel_query_id, str
+        ) or not cls._CANCEL_QUERY_ID_PATTERN.match(cancel_query_id):
+            logger.warning("Invalid Trino cancel_query_id: %s", cancel_query_id)
+            return False
         try:
             cursor.execute(
-                f"CALL system.runtime.kill_query(query_id => '{cancel_query_id}',"
-                "message => 'Query cancelled by Superset')"
+                "CALL system.runtime.kill_query(query_id => ?, "
+                "message => 'Query cancelled by Superset')",
+                (cancel_query_id,),
             )
             cursor.fetchall()  # needed to trigger the call
         except Exception:  # pylint: disable=broad-except

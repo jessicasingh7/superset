@@ -822,10 +822,14 @@ WHERE datistemplate = false;
         :return: True if query cancelled successfully, False otherwise
         """
         try:
+            pid = int(cancel_query_id)
+        except (TypeError, ValueError):
+            logger.warning("Invalid Postgres cancel_query_id: %s", cancel_query_id)
+            return False
+        try:
             cursor.execute(
-                "SELECT pg_terminate_backend(pid) "  # noqa: S608
-                "FROM pg_stat_activity "
-                f"WHERE pid='{cancel_query_id}'"
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE pid = %s",
+                (pid,),
             )
         except Exception:  # pylint: disable=broad-except
             return False

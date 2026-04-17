@@ -16,6 +16,7 @@
 # under the License.
 
 import contextlib
+import logging
 import re
 import threading
 from re import Pattern
@@ -39,6 +40,13 @@ from superset.db_engine_specs.base import BaseEngineSpec, DatabaseCategory
 from superset.errors import SupersetErrorType
 from superset.models.core import Database
 from superset.models.sql_lab import Query
+
+logger = logging.getLogger(__name__)
+
+# Ocient query IDs exposed by the cursor are alphanumeric identifiers. Validate
+# them strictly before embedding in a CANCEL statement since the driver does
+# not support binding parameters for the CANCEL command.
+_OCIENT_QUERY_ID_PATTERN = re.compile(r"^[A-Za-z0-9_\-]+$")
 
 # Regular expressions to catch custom errors
 
