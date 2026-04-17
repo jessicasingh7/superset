@@ -165,6 +165,7 @@
     "dayjs": "^1.11.20",
     "dom-to-image-more": "^3.7.2",
     "dom-to-pdf": "^0.3.2",
+    "dompurify": "^3.3.3",
     "echarts": "^5.6.0",
     "fast-glob": "^3.3.2",
     "fs-extra": "^11.3.4",
